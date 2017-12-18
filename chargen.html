@@ -869,7 +869,7 @@
 				var orientation_picked = orientation_list[tag].value;
 				var preference_picked = preference_list[tag].value;
 				var comment = commentFields[tag].value;
-				var result = orientation_picked+preference_picked;
+				var result = preference_picked+orientation_picked;
 				if(result.length > 0){
 					var kinkCode = tag+":"+result;
 					dumpedKinks.push(kinkCode);
