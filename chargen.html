@@ -1,0 +1,909 @@
+<html>
+	<head>
+		<title>Penultimate Character Generator</title>
+		<meta charset="utf8">
+	</head>
+	<body>
+		<h1>Penultimate Character Generator</h1>
+		<div id="generalFields" class="mainbox"></div>
+		<div id="fingerFields" class="mainbox"></div>
+		<div id="kinkFields" class="mainbox"></div>
+		<div id="infoFields" class="mainbox"></div>
+		<div id="loadExport" class="mainbox"></div>
+	</body>
+	<style>
+		.fieldExplanation{
+			font-size: 0.9em;
+			font-style: italic;
+		}
+		.foldable{
+			cursor: pointer;
+			/*text-decoration: underline;
+			text-decoration-style: dashed;*/
+		}
+		.largeCol{
+			width : 80%;
+		}
+		.commentField{
+			width:200px;
+		}
+		.textField{
+			width:100%;
+		}
+		.areaField{
+			min-height: 150px;
+			width:100%;
+		}
+		.kinkDescription{
+			font-style: italic;
+			padding-left: 20px;
+			padding-right: 20px;
+		}
+		.sectionName{
+			font-size: 1em;
+		}
+		.categoryName{
+			font-size: 1em;
+		}
+		.kinkName{
+			font-weight : bold;
+		}
+		.folded{
+			display: none;
+		}
+		.mainbox{
+			border-radius: 30px;
+			border: 2px solid #000;
+			padding: 25px; 
+		}
+		.sectionbox{
+			border-radius: 25px;
+			border: 2px solid #73AD21;
+			padding: 20px; 
+		}
+		.categorybox{
+			border-radius: 10px;
+			border: 2px solid #2173AD;
+			padding: 10px;
+		}
+		.kinkbox{
+			border-radius: 5px;
+			border: 2px solid #AD2173;
+			padding: 5px;
+		}
+	</style>
+	<script>
+		var textAreaField;
+		var tableCustom;
+		var customFields = [];
+		var generalFields = {};
+		var generalFieldsName = [];
+		var tableKinksCustom;
+		var customKinksFields = [];
+		var tableInfo;
+		var customInfo = [];
+		const CUSTOM_NAME = 18;
+		const CUSTOM_FIELD = 1348;
+		const ORIENTATION_VALUES = [['', '(default both)'], ["G", "giving"], ["R", "receiving"], ["B", "both"]];
+		const PREFERENCE_VALUES = [['', '(default yes)'], ["F", "favorite"], ["Y", "yes"], ["M", "maybe"], ["N", "no"]];
+		var STANDARD_FIELDS = ['Age','App Age','Height','Weight','Hair','Eyes','Sex Pref','Species'];
+		var ADDITIONAL_FIELDS = ['General','Full Name','Skin','Gender','Role','Owned By','Slaves Owned','Short Desc','Source','Picture'];
+		var CATEGORY_CUSTOM_KINKS = [];
+
+		function selectValue(select, value){
+			select.value = value;
+		}
+
+		function makeId(name){
+			return name.toLowerCase().replace(" ", "_");
+		}
+		var escapeChars = ",()%\\[];";
+		var escapeTable = {};
+		var unescapeTable = {};
+		var needEscaping = [];
+		var needUnescaping = [];
+		function addCharEscape(normal, escaped) {
+			escapeTable[normal] = escaped;
+			unescapeTable[escaped] = normal;
+			needEscaping.push(normal);
+			needUnescaping.push(escaped);
+		}
+		for (let index = 0; index < escapeChars.length; index++) {
+			const element = escapeChars.charAt(index);
+			const correspondance = "\\"+element;
+			addCharEscape(element, correspondance);
+		}
+		addCharEscape("\n", "%r");
+		function properlyUnescape(text){
+			var returnString = "";
+			for (let index = 0; index < text.length; index++) {
+				var chr = text.charAt(index);
+				if(chr == "\\" || chr == '%'){
+					chr += text.charAt(++index);
+					chr = unescapeTable[chr];
+				}
+				returnString += chr;
+			}
+			return returnString;
+		}
+
+		function properlyEscape(text){
+			var returnString = "";
+			for (let index = 0; index < text.length; index++) {
+				var chr = text.charAt(index);
+				if(needEscaping.indexOf(chr) >= 0)
+					chr = escapeTable[chr];
+				returnString += chr;
+			}
+			return returnString;
+		}
+
+		function generateLengthValidator(field, length){
+			function validate(){
+				var value = properlyEscape(field.value);
+				return length-value.length;
+			}
+			return validate;
+		}
+
+		function generateSelect(list) {
+			var select = document.createElement("select");
+			for (let index = 0; index < list.length; index++) {
+				const element = list[index];
+				var opt = document.createElement("option");
+				opt.value = element[0];
+				opt.innerHTML = element[1];
+				select.appendChild(opt);
+			}
+			return select;
+		}
+		var isNumericRe = /^\d+$/;
+		var isRangeRe = /^\d+-\d+$/;
+		function generateContentValidator(field, content){
+			function validate(){
+				var value = properlyEscape(field.value);
+				if (value.length == 0) return true;
+				for (let index = 0; index < content.length; index++) {
+					const constraint = content[index];
+					if(constraint == "number")
+						if (isNumericRe.test(value))
+							return true;
+					if(constraint == "number_range")
+						if (isRangeRe.test(value))
+							return true;
+					if(constraint instanceof Array){
+						for (let j = 0; j < constraint.length; j++) {
+							const offer = constraint[j];
+							if(offer == value)
+								return true;					
+						}
+					}
+				}
+				return false;
+			}
+			return validate;
+		}
+		function createFoldable(customLabels){
+			var arrows = ["⬉","⬊"];
+			if(customLabels == undefined){
+				customLabels = arrows;
+			}else{
+				if(customLabels.length == 1)
+					customLabels.push(customLabels[0]);
+				for (let index = 0; index < customLabels.length; index++)
+					customLabels[index] = arrows[index] + customLabels[index];
+			}
+			var foldable = document.createElement("div");
+			var spanFold = document.createElement("span");
+			spanFold.appendChild(document.createTextNode(customLabels[0]));
+			spanFold.classList.add("foldable");
+			foldable.classList.add("unfolded");
+			var unfolded = true;
+			function fold(newState){
+				if(newState != undefined){
+					unfolded = newState;
+				}
+				if(!unfolded){
+					foldable.classList.remove("folded");
+					foldable.classList.add("unfolded");
+					spanFold.innerText = customLabels[0];
+				}else{
+					foldable.classList.remove("unfolded");
+					foldable.classList.add("folded");
+					spanFold.innerText = customLabels[1];
+				}
+				unfolded = !unfolded;
+			}
+			function eventClick() {
+				fold();
+			};
+			foldable.fold = fold;
+			spanFold.addEventListener("click", eventClick);
+			return [spanFold,foldable];
+		}
+		function generateValidator(field, limits) {
+			var spanValid = document.createElement("span");
+			var validators = {};
+			if("length" in limits)
+				validators["length"] = generateLengthValidator(field, limits["length"]);
+			if("content" in limits)
+				validators["content"] = generateContentValidator(field, limits["content"]);
+			function validate(event){
+				var reasons = [];
+				spanValid.style = "";
+				if("length" in validators){
+					var len = validators["length"]();
+					if(len < 0){
+						spanValid.style = "color:red;";
+						reasons.push((-len)+" character"+ (-len > 1 ? "s" : '')+" above limit");
+					}else{
+						reasons.push(len+" characters remaining");
+					}
+				}
+				if("content" in validators)
+					if(!validators["content"]()){
+						spanValid.style = "color:red;";
+						reasons.push("doesn't match the required content");
+					}
+				spanValid.innerText = "";
+				spanValid.appendChild(document.createTextNode("("+reasons.join(",")+")"));
+			}
+			field.addEventListener("keyup", validate);
+			return spanValid;
+		}
+
+		function generateFingerField(name, limits) {
+			var type = "input";
+			var css = "textField";
+			if("length" in limits && limits["length"] > 50){
+				type = "textarea";
+				css = "areaField";
+			}
+			var field = document.createElement(type);
+			field.setAttribute("id", makeId(field["name"]));
+			field.classList.add(css);
+			return field;
+		}
+		var preference_list = {};
+		function generateFieldPreference(field_tag){
+			var kinkPreference = generateSelect(PREFERENCE_VALUES);
+			preference_list[field_tag] = kinkPreference;
+			return kinkPreference;
+		}
+
+		var kink_tags = [];
+		var fingerFields = {};
+
+		var commentFields = {};
+		function generateFieldComment(field){
+			var kinkComment = document.createElement("input");
+			kinkComment.setAttribute("placeholder", "comment for " + field.name + " here");
+			kinkComment.classList.add("commentField");
+			commentFields[field.tag] = kinkComment;
+			return kinkComment;
+		}
+
+		var orientation_list = {};
+
+		function generateFieldOrientation(field_tag){
+			var kinkOrientation = generateSelect(ORIENTATION_VALUES);
+			orientation_list[field_tag] = kinkOrientation;
+			return kinkOrientation;
+		}
+
+		function generateFieldLine(field_name, validator, field, field_description, table_ref){
+			var tr = document.createElement("tr");
+			var tr2 = document.createElement("tr");
+			var tdField = document.createElement("td");
+			var tdExplanation = document.createElement("td");
+			var tdInput = document.createElement("td");
+			tdInput.classList.add("largeCol");
+			var tdValidator = document.createElement("td")
+			fingerFields[field_name] = validator;
+			fingerFields[field_name] = field;
+			tr.appendChild(tdField);
+			tr.appendChild(tdValidator);
+			tr2.appendChild(tdExplanation);
+			tr2.appendChild(tdInput);
+			tdValidator.appendChild(validator);
+			tdField.appendChild(document.createTextNode(field_name));
+			tdExplanation.appendChild(document.createTextNode(field_description));
+			tdExplanation.classList.add("fieldExplanation");
+			tdInput.appendChild(field);
+			if(table_ref != undefined){
+				table_ref.appendChild(tr);
+				table_ref.appendChild(tr2);
+				var spanning = document.createElement("tr");
+				spanning.style = "height:20px";
+				table_ref.appendChild(spanning);
+			}
+		}
+
+		function generateKinkFields(obj, domObj){
+			kink_tags.push(obj.tag);
+			var orientation = generateFieldOrientation(obj.tag);
+			var preference = generateFieldPreference(obj.tag);
+			var comment = generateFieldComment(obj);
+			domObj.appendChild(orientation);
+			domObj.appendChild(preference);
+			domObj.appendChild(comment);
+		}
+
+		function generateDescription(thing, dom){
+			if (thing.description){
+				var span = document.createElement("span");
+				span.appendChild(document.createTextNode(thing.description));
+				span.classList.add("kinkDescription");
+				dom.appendChild(span);
+			}
+		}
+
+		function generateKink(kink){
+			var kinkDiv = document.createElement("div");
+			var title = document.createElement("span");
+			title.classList.add("kinkName");
+			title.appendChild(document.createTextNode(kink.name));
+			kinkDiv.appendChild(title);
+			generateDescription(kink, kinkDiv);
+			kinkDiv.classList.add("kinkBox");
+			generateKinkFields(kink, kinkDiv);
+			kinkFields[kink.tag] = kinkDiv;
+			return kinkDiv;
+		}
+		function generateKinkCategory(category){
+			var categoryDiv = document.createElement("div");
+			var title = document.createElement("span");
+			title.classList.add("categoryName");
+			var foldingContent = null;
+			if(category.kinks.length > 0){
+				var foldable = createFoldable([category.name]);
+				var folder = foldable[0];
+				foldingContent = foldable[1];
+				foldingContent.fold(true);
+				title.appendChild(folder);
+			}else{
+				title.appendChild(document.createTextNode(category.name));
+			}
+			categoryDiv.appendChild(title);
+			generateDescription(category, categoryDiv);
+			categoryDiv.classList.add("categoryBox");
+			if(foldingContent){
+				categoryDiv.appendChild(foldingContent);
+				for (let index = 0; index < category.kinks.length; index++) {
+					const kink = category.kinks[index];
+					var kinkField = generateKink(kink);
+					foldingContent.appendChild(kinkField);
+				}
+				foldingContent.fold(true);
+			}
+			generateKinkFields(category, categoryDiv);
+			kinkFields[category.tag] = categoryDiv;
+			return categoryDiv;
+		}
+		function generateKinkSection(section){
+			var sectionDiv = document.createElement("div");
+			var title = document.createElement("span");
+			title.classList.add("sectionName");
+			var foldable = createFoldable([section.name]);
+			var folder = foldable[0];
+			var foldingContent = foldable[1];
+			foldingContent.fold(true);
+			title.appendChild(folder);
+			sectionDiv.appendChild(title);
+			for (let index = 0; index < section.categories.length; index++) {
+				const category = section.categories[index];
+				foldingContent.append(generateKinkCategory(category))
+			}
+			sectionDiv.appendChild(foldingContent);
+			sectionDiv.classList.add("sectionBox");
+			//generateKinkFields(section, sectionDiv);
+			kinkFields[section.tag] = sectionDiv;
+			return sectionDiv;
+		}
+
+		function addCustomKink(name, category, orientation, preference, comment){
+			var fieldName = document.createElement("input");
+			fieldName.value = name;
+			fieldName.classList.add("textField");
+			fieldName.setAttribute("placeholder", "custom kink name");
+			var fieldCategory = generateSelect(CATEGORY_CUSTOM_KINKS);
+			fieldCategory.selectedIndex=getCategory(category);
+			var fieldOrientation = generateSelect(ORIENTATION_VALUES);
+			fieldOrientation.selectedIndex=getOrientation(orientation);
+			var fieldPrefernece = generateSelect(PREFERENCE_VALUES);
+			fieldPrefernece.selectedIndex=getOrientation(preference);
+			var fieldComment = document.createElement("input");
+			fieldComment.setAttribute("placeholder", "custom kink comment");
+			fieldComment.value = comment;
+			fieldComment.classList.add("textField");
+			var line = [fieldName, fieldCategory, fieldOrientation, fieldPrefernece, fieldComment];
+			customKinksFields.push(line);
+			var tr = document.createElement("tr");
+			for (let index = 0; index < line.length; index++) {
+				const element = line[index];
+				var td = document.createElement("td");
+				td.appendChild(element);
+				tr.appendChild(td);
+			}
+			tableKinksCustom.appendChild(tr);
+		}
+
+		function removeAllCustomKinks(){
+			tableKinksCustom.innerHTML = "";
+			customKinksFields = [];
+		}
+
+		function removeLastCustomKink(){
+			if(customKinksFields.length > 0){
+				var rowCount = tableKinksCustom.rows.length;
+				tableKinksCustom.deleteRow(rowCount - 1);
+				customKinksFields.pop();
+			}
+		}
+		function generateGeneral(){
+			var generalDiv = document.getElementById("generalFields");
+			var mainFoldable = createFoldable(["General info"]);
+			var tableInfo = document.createElement("table");
+			var nameField = document.createElement("input");
+			generalFields["name"] = nameField;
+			nameField.classList.add("textField");
+			nameField.placeholder = "the name of your character";
+			var aliasField = document.createElement("input");
+			generalFields["alias"] = aliasField;
+			aliasField.classList.add("textField");
+			aliasField.placeholder = "the alias of your character";
+			var sexField = document.createElement("input");
+			generalFields["sex"] = sexField;
+			sexField.classList.add("textField");
+			sexField.placeholder = "the sex of your character";
+			var descField = document.createElement("textarea");
+			generalFields["desc"] = descField;
+			descField.placeholder = "the description of your character";
+			descField.classList.add("areaField");
+			var timezoneField = document.createElement("input");
+			generalFields["tz"] = timezoneField;
+			timezoneField.classList.add("textField");
+			timezoneField.placeholder = "your timezone";
+			var trs = [[document.createTextNode("Name"), nameField], [document.createTextNode("Alias"), aliasField], 
+			[document.createTextNode("Sex"), sexField],[document.createTextNode("Description"),descField],
+			[document.createTextNode("Timezone"), timezoneField]];
+			for (let index = 0; index < trs.length; index++){
+				var tr = document.createElement("tr");
+				var td1 = document.createElement("td");
+				var td2 = document.createElement("td");
+				td1.appendChild(trs[index][0]);
+				td2.appendChild(trs[index][1]);
+				tr.appendChild(td1);
+				tr.appendChild(td2);
+				tableInfo.appendChild(tr);
+			}
+			generalDiv.appendChild(mainFoldable[0]);
+			generalDiv.appendChild(mainFoldable[1]);
+			mainFoldable[1].appendChild(tableInfo);
+			mainFoldable[1].fold(true);
+			generalFieldsName = Object.keys(generalFields);
+		}
+		function generateKinks(kinkData){
+			var sections = Object.keys(kinkData);
+			var kinksDiv = document.getElementById("kinkFields");
+			var mainFoldable = createFoldable(["Kinks","Kinks"]);
+			kinksDiv.appendChild(mainFoldable[0]);
+			kinksDiv.appendChild(mainFoldable[1]);
+			for (let index = 0; index < sections.length; index++) {
+				const sectionTag = sections[index];
+				const section = kinkData[sectionTag];
+				CATEGORY_CUSTOM_KINKS.push([section.tag, section.name]);
+				var sect = generateKinkSection(section);
+				mainFoldable[1].appendChild(sect);
+			}
+			/////////////////////////////
+			var customKinks = document.createElement("div");
+			var foldable = createFoldable(["Custom kinks"]);
+			var folder = foldable[0];
+			var foldingContent = foldable[1];
+			tableKinksCustom = document.createElement("table");
+			foldingContent.fold(true);
+			customKinks.appendChild(folder);
+			customKinks.appendChild(foldingContent);
+			var customKinksButtons = document.createElement("div");
+			var buttonAddCustomKink = document.createElement("button");
+			buttonAddCustomKink.innerHTML = "Add a custom kink";
+			buttonAddCustomKink.onclick = function(){
+				addCustomKink("","","","","");
+			}
+			var buttonRemoveLastCustomKink = document.createElement("button");
+			buttonRemoveLastCustomKink.innerHTML = "Remove last custom kink";
+			buttonRemoveLastCustomKink.onclick = removeLastCustomKink;
+			customKinksButtons.appendChild(buttonAddCustomKink);
+			customKinksButtons.appendChild(buttonRemoveLastCustomKink);
+			foldingContent.appendChild(tableKinksCustom);
+			foldingContent.appendChild(customKinksButtons);
+			customKinks.classList.add("sectionBox");
+			mainFoldable[1].appendChild(customKinks);
+			/////////////////////////////
+			mainFoldable[1].fold(true);
+		}
+
+		function generateLoad(){
+			var loadDiv = document.getElementById("loadExport");
+			var foldable = createFoldable(["Export/Load", "Export/Load"]);
+			loadDiv.appendChild(foldable[0]);
+			loadDiv.appendChild(foldable[1]);
+			var textAreaDiv = document.createElement("div");
+			var textArea = document.createElement("textarea");
+			textAreaField = textArea;
+			textArea.classList.add("areaField");
+			textAreaDiv.appendChild(textArea);
+			var buttonsDiv = document.createElement("div");
+			var loadButton = document.createElement("button");
+			loadButton.innerHTML = "Load from code (paste from PenMUSH here)";
+			var exportButton = document.createElement("button");
+			exportButton.innerHTML = "Save as code (copy to PenMUSH here)";
+			exportButton.onclick = exportData;
+			loadButton.onclick = loadData;
+			buttonsDiv.appendChild(loadButton);
+			buttonsDiv.appendChild(exportButton);
+			foldable[1].appendChild(textAreaDiv);
+			foldable[1].appendChild(buttonsDiv);
+			foldable[1].fold(true);
+		}
+		function generatePage(data){
+			generateGeneral();
+			generateFinger(data["finger"]);
+			generateKinks(data["kinks"]);
+			generateInfo();
+			generateLoad();
+		}
+
+		function addCustomInfo(name, value){
+			var infoName = document.createElement("input");
+			infoName.value = name;
+			infoName.classList.add("textField");
+			infoName.setAttribute("placeholder", "custom info title");
+			var infoValue = document.createElement("textarea");
+			infoValue.setAttribute("placeholder", "custom field value");
+			infoValue.value = value;
+			infoValue.classList.add("areaField");
+			customInfo.push([infoName, infoValue]);
+			var tr = document.createElement("tr");
+			var tdName = document.createElement("td");
+			tdName.appendChild(infoName);
+			var tdValue = document.createElement("td");
+			tdValue.appendChild(infoValue);
+			tr.appendChild(tdName);
+			tr.appendChild(tdValue);
+			tableInfo.appendChild(tr);
+		}
+
+		function removeAllCustomInfo(){
+			tableInfo.innerHTML = "";
+			customInfo = [];
+		}
+
+		function removeLastCustomInfo(){
+			if(customInfo.length > 0){
+				var rowCount = tableInfo.rows.length;
+				tableInfo.deleteRow(rowCount - 1);
+				customInfo.pop();
+			}
+		}
+
+		function generateInfo() {
+			var info = createFoldable(["Information files"]);
+			var infoMainDiv = document.getElementById("infoFields");
+			infoMainDiv.appendChild(info[0]);
+			infoMainDiv.appendChild(info[1]);
+			tableInfo = document.createElement("table");
+			info[1].appendChild(tableInfo); 
+			var divButtonsInfo = document.createElement("div");
+			var buttonAddInfo = document.createElement("button");
+			buttonAddInfo.innerHTML = "Add info";
+			buttonAddInfo.onclick = function(){
+				addCustomInfo("","");
+			}
+			var buttonRemoveLastInfo = document.createElement("button");
+			buttonRemoveLastInfo.innerHTML = "Remove last info";
+			buttonRemoveLastInfo.onclick = removeLastCustomInfo;
+			divButtonsInfo.appendChild(buttonAddInfo);
+			divButtonsInfo.appendChild(buttonRemoveLastInfo);
+			info[1].appendChild(divButtonsInfo);
+			info[1].fold(true);
+		}
+
+		function addCustomField(name, value){
+			var fieldName = document.createElement("input");
+			fieldName.value = name;
+			fieldName.classList.add("textField");
+			fieldName.setAttribute("placeholder", "custom field name");
+			var fieldValue = document.createElement("textarea");
+			fieldValue.setAttribute("placeholder", "custom field value");
+			fieldValue.value = value;
+			fieldValue.classList.add("areaField");
+			customFields.push([fieldName, fieldValue]);
+			var tr = document.createElement("tr");
+			var tdName = document.createElement("td");
+			tdName.appendChild(fieldName);
+			var tdValue = document.createElement("td");
+			tdValue.appendChild(fieldValue);
+			tr.appendChild(tdName);
+			tr.appendChild(tdValue);
+			tableCustom.appendChild(tr);
+		}
+
+		function removeAllCustomFields(){
+			tableCustom.innerHTML = "";
+			customFields = [];
+		}
+
+		function removeLastCustomField(){
+			if(customFields.length > 0){
+				var rowCount = tableCustom.rows.length;
+				tableCustom.deleteRow(rowCount - 1);
+				customFields.pop();
+			}
+		}
+
+		function generateFinger(fingerData){
+			var foldable = createFoldable(["Finger information","Finger information"]);
+			var fingerMainDiv = document.getElementById("fingerFields");
+			var fingerStandard = createFoldable(["Standard fields"]);
+			var fingerOptional = createFoldable(["Optional fields"]);
+			var fingerCustom = createFoldable(["Custom fields"]);
+			fingerMainDiv.appendChild(foldable[0]);
+			fingerMainDiv.appendChild(foldable[1]);
+			foldable[1].appendChild(fingerStandard[0]);
+			foldable[1].appendChild(fingerStandard[1]);
+			foldable[1].appendChild(document.createElement("br"));
+			foldable[1].appendChild(fingerOptional[0]);
+			foldable[1].appendChild(fingerOptional[1]);
+			foldable[1].appendChild(document.createElement("br"));
+			foldable[1].appendChild(fingerCustom[0]);
+			foldable[1].appendChild(fingerCustom[1]);
+			var tableStandard = document.createElement("table");
+			fingerStandard[1].appendChild(tableStandard);
+			var tableOptional = document.createElement("table");
+			fingerOptional[1].appendChild(tableOptional); 
+			for (let index = 0; index < STANDARD_FIELDS.length; index++) {
+				const name = STANDARD_FIELDS[index];
+				var fingerField = fingerData[name];
+				var field = generateFingerField(fingerField['name'],fingerField['limits']);
+				var field_val = generateValidator(field,fingerField['limits']);
+				var fieldLine = generateFieldLine(fingerField["name"], field_val, field, fingerField["description"], tableStandard);
+			}
+			for (let index = 0; index < ADDITIONAL_FIELDS.length; index++) {
+				const name = ADDITIONAL_FIELDS[index];
+				var fingerField = fingerData[name];
+				var field = generateFingerField(fingerField['name'],fingerField['limits']);
+				var field_val = generateValidator(field,fingerField['limits']);
+				var fieldLine = generateFieldLine(fingerField["name"], field_val, field, fingerField["description"], tableOptional);
+			}
+			tableCustom = document.createElement("table");
+			fingerCustom[1].appendChild(tableCustom); 
+			var divButtonsCustom = document.createElement("div");
+			var buttonAddField = document.createElement("button");
+			buttonAddField.innerHTML = "Add custom field";
+			buttonAddField.onclick = function(){
+				addCustomField("","");
+			}
+			var buttonRemoveLastField = document.createElement("button");
+			buttonRemoveLastField.innerHTML = "Remove last field";
+			buttonRemoveLastField.onclick = removeLastCustomField;
+			divButtonsCustom.appendChild(buttonAddField);
+			divButtonsCustom.appendChild(buttonRemoveLastField);
+			fingerCustom[1].appendChild(divButtonsCustom);
+			foldable[1].fold(true);
+		}
+
+		const FINGER_SET = "+finger/set ";
+		const FINGER_CUSTOM = "+finger/custom ";
+		const INFO_SET = "+info/set ";
+		const KINK_SET = "+kinks/add ";
+		const KINK_COMMENT = "+kinks/comment ";
+		const KINK_CUSTOM = "+kinks/custom ";
+
+		function clearData(){
+			var fingerNames =  Object.keys(fingerFields);
+			for (let index = 0; index < fingerNames.length; index++) {
+				fingerFields[fingerNames[index]].value = "";
+			}
+			var generalNames = Object.keys(generalFields);
+			for (let index = 0; index < generalNames.length; index++) {
+				generalFields[generalNames[index]].value = "";
+			}
+			for (let index = 0; index < kink_tags.length; index++) {
+				const tag = kink_tags[index];
+				orientation_list[tag].selectedIndex = 0;
+				preference_list[tag].selectedIndex = 0;
+				commentFields[tag].value = "";
+			}
+			removeAllCustomKinks();
+			removeAllCustomInfo();
+			removeAllCustomFields();
+		}
+		function getPreference(kinkParameter){
+			for (let index = 1; index < PREFERENCE_VALUES.length; index++) {
+				const element = PREFERENCE_VALUES[index][0];
+				if(kinkParameter.indexOf(element) >= 0)
+					return index;
+			}
+			return 0;
+		}
+		function getOrientation(kinkParameter){
+			for (let index = 1; index < ORIENTATION_VALUES.length; index++) {
+				const element = ORIENTATION_VALUES[index][0];
+				if(kinkParameter.indexOf(element) >= 0)
+					return index;
+			}
+			return 0;
+		}
+
+		function getCategory(kinkParameter){
+			for (let index = 1; index < CATEGORY_CUSTOM_KINKS.length; index++) {
+				const element = CATEGORY_CUSTOM_KINKS[index][0];
+				if(kinkParameter.indexOf(element) >= 0)
+					return index;
+			}
+			return 0;
+		}
+
+		function selectKinkForCode(kinkCode){
+			var sep = kinkCode.split(":");
+			var tag = sep[0].trim().toUpperCase();
+			var ori = getOrientation(sep[1]);
+			var pref = getPreference(sep[1]);
+			orientation_list[tag].selectedIndex = ori;
+			preference_list[tag].selectedIndex = pref;
+		}
+
+		function escapeRegExp(strToEscape) {
+			return strToEscape.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+		}
+
+		function trimChar(origString, charToTrim) {
+			charToTrim = escapeRegExp(charToTrim);
+			var regEx = new RegExp("^[" + charToTrim + "]+|[" + charToTrim + "]+$", "g");
+			return origString.replace(regEx, "");
+		}
+
+		function loadLine(line){
+			var lineBuffer = line.trim();
+			if(lineBuffer.startsWith(FINGER_SET)){
+				var subline = lineBuffer.substr(FINGER_SET.length);
+				var params = subline.split("=", 2);
+				fingerFields[params[0]].value = properlyUnescape(params[1].trim());
+			}else if(lineBuffer.startsWith(FINGER_CUSTOM)){
+				var subline = lineBuffer.substr(FINGER_CUSTOM.length);
+				var params = subline.split("=", 2);
+				addCustomField(params[0],properlyUnescape(params[1].trim()));
+			}else if(lineBuffer.startsWith(INFO_SET)){
+				var subline = lineBuffer.substr(INFO_SET.length);
+				var params = subline.split("=", 2);
+				addCustomInfo(params[0],properlyUnescape(params[1].trim()));
+			}else if(lineBuffer.startsWith("@")){
+				// Annoying ones
+				var subline = lineBuffer.substr(1);
+				var params = subline.split(' me=', 2);
+				var name = params[0];
+				var value = trimChar(params[1], '"');
+				if(generalFieldsName.indexOf(name)>0)
+					generalFields[name].value = value;
+			}else if(lineBuffer.startsWith(KINK_SET)){
+				var subline = lineBuffer.substr(KINK_SET.length);
+				var kinkCodes = subline.split(" ");
+				for (let index = 0; index < kinkCodes.length; index++) {
+					const kinkCode = kinkCodes[index];
+					selectKinkForCode(kinkCode);
+				}
+			}else if(lineBuffer.startsWith(KINK_COMMENT)){
+				var subline = lineBuffer.substr(KINK_COMMENT.length);
+				var kinkinfo = subline.split("=");
+				var tag = kinkinfo[0];
+				var comment = kinkinfo[1];
+				commentFields[tag].value = comment;
+			}else{
+				console.log(lineBuffer);
+			}
+		}
+
+		function loadData(){
+			clearData();
+			var data = textAreaField.value.split("\n");
+			var lineBuffer = "";
+			for (let index = 0; index < data.length; index++) {
+				const line = data[index];
+				if((line.startsWith("+") || line.startsWith("@")) && index !=0){
+					loadLine(lineBuffer.trim());
+					lineBuffer = "";
+				}
+				lineBuffer += line;
+				if(index == data.length - 1 && lineBuffer != "")
+					loadLine(lineBuffer);
+			}
+		}
+
+		function exportData() {
+			var dumpedLines = [];
+			var generalNames = Object.keys(generalFields);
+			for (let index = 0; index < generalNames.length; index++) {
+				const name = generalNames[index];
+				const value = generalFields[name].value.trim();
+				if(value.length > 0){
+					var trimmedValue = properlyEscape(value);
+					if(trimmedValue.indexOf(" ") >= 0)
+						trimmedValue = '"' + trimmedValue + '"';
+					var line = "@"+name+" me="+trimmedValue;
+					dumpedLines.push(line);
+				}
+			}
+			var fingerNames =  Object.keys(fingerFields);
+			for (let index = 0; index < fingerNames.length; index++) {
+				const name = fingerNames[index];
+				const value = fingerFields[name].value.trim();
+				if(value.length > 0){
+					var line = FINGER_SET+name+"="+properlyEscape(value);
+					dumpedLines.push(line);
+				}
+			}
+			for (let index = 0; index < customFields.length; index++) {
+				const element = customFields[index];
+				const name = element[0].value;
+				const value = element[1].value;
+				if(name.length > 0 && value.length){
+					var line = FINGER_CUSTOM+name+"="+properlyEscape(value);
+					dumpedLines.push(line);
+				}
+			}
+			for (let index = 0; index < customInfo.length; index++) {
+				const element = customInfo[index];
+				const name = element[0].value;
+				const value = element[1].value;
+				if(name.length > 0 && value.length){
+					var line = INFO_SET+name+"="+properlyEscape(value);
+					dumpedLines.push(line);
+				}
+			}
+			var dumpedKinks = [];
+			var dumpedKinkComments = [];
+			for (let index = 0; index < kink_tags.length; index++) {
+				const tag = kink_tags[index];
+				var orientation_picked = orientation_list[tag].value;
+				var preference_picked = preference_list[tag].value;
+				var comment = commentFields[tag].value;
+				var result = orientation_picked+preference_picked;
+				if(result.length > 0){
+					var kinkCode = tag+":"+result;
+					dumpedKinks.push(kinkCode);
+				}
+				if(comment.length > 0){
+					dumpedKinkComments.push(KINK_COMMENT+tag+"="+comment);
+				}
+			}
+			if(dumpedKinks.length > 0)
+				dumpedLines.push(KINK_SET + dumpedKinks.join(" "));
+			if(dumpedKinkComments.length > 0)
+				for (let index = 0; index < dumpedKinkComments.length; index++)
+					dumpedLines.push(dumpedKinkComments[index]);
+			for (let index = 0; index < customKinksFields.length; index++) {
+				const element = customKinksFields[index];
+				//[fieldName, fieldCategory, fieldOrientation, fieldPrefernece, fieldComment];
+				var name = element[0].value;
+				var category = element[1].value;
+				var orientation = element[2].value;
+				var preference = element[3].value;
+				var comment = element[4].value;
+				dumpedLines.push(KINK_CUSTOM+" Z"+index+"/"+category+"="+name+"="+comment);
+			}
+			textAreaField.value = dumpedLines.join("\n");
+		}
+
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', 'data.json');
+		xhr.onload = function() {
+			if (xhr.status === 200) {
+				var data = JSON.parse(xhr.responseText);
+				generatePage(data);
+			}
+		};
+		xhr.send();
+	</script>
+</html>
